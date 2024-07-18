@@ -1,5 +1,3 @@
-# -chess
-#practical chess game
 import tkinter as tk
 
 class ChessGame:
@@ -12,6 +10,7 @@ class ChessGame:
             'Black': {'king_side': True, 'queen_side': True}
         }
         self.en_passant_target = None
+        self.promotion_callback = None
 
     def create_board(self):
         board = [[' ' for _ in range(8)] for _ in range(8)]
@@ -52,9 +51,11 @@ class ChessGame:
 
         # Handle pawn promotion
         if piece == '♙' and end[0] == 7:
-            self.board[end[0]][end[1]] = '♕'
+            self.promotion_callback = (end, 'White')
+            return False  # Stop the game flow for promotion
         elif piece == '♟' and end[0] == 0:
-            self.board[end[0]][end[1]] = '♛'
+            self.promotion_callback = (end, 'Black')
+            return False  # Stop the game flow for promotion
 
         # Update en passant target
         self.en_passant_target = (end[0] + (1 if self.current_player == 'White' else -1), end[1]) if piece in '♙♟' and abs(start[0] - end[0]) == 2 else None
@@ -77,6 +78,16 @@ class ChessGame:
 
         self.switch_player()
         print(f"Move made: {piece} from {start} to {end}")
+        return True
+
+    def promote_pawn(self, position, piece_type):
+        pieces = {'Queen': '♕' if self.current_player == 'White' else '♛',
+                  'Rook': '♖' if self.current_player == 'White' else '♜',
+                  'Bishop': '♗' if self.current_player == 'White' else '♝',
+                  'Knight': '♘' if self.current_player == 'White' else '♞'}
+        self.board[position[0]][position[1]] = pieces[piece_type]
+        self.promotion_callback = None
+        self.switch_player()
 
     def undo_move(self):
         if self.move_stack:
@@ -223,6 +234,27 @@ class ChessGame:
                     return (i, j)
         return None
 
+class PromotionDialog(tk.Toplevel):
+    def __init__(self, parent, game, position, color):
+        super().__init__(parent)
+        self.game = game
+        self.position = position
+        self.color = color
+        self.title("Pawn Promotion")
+
+        self.geometry("200x100")
+        self.create_widgets()
+
+    def create_widgets(self):
+        tk.Button(self, text="Queen", command=lambda: self.promote("Queen")).pack(fill="x")
+        tk.Button(self, text="Rook", command=lambda: self.promote("Rook")).pack(fill="x")
+        tk.Button(self, text="Bishop", command=lambda: self.promote("Bishop")).pack(fill="x")
+        tk.Button(self, text="Knight", command=lambda: self.promote("Knight")).pack(fill="x")
+
+    def promote(self, piece_type):
+        self.game.promote_pawn(self.position, piece_type)
+        self.destroy()
+
 class ChessGameUI(tk.Tk):
     def __init__(self, game):
         super().__init__()
@@ -277,7 +309,9 @@ class ChessGameUI(tk.Tk):
         else:
             start_row, start_col = self.selected_piece
             if (row, col) != (start_row, start_col) and self.game.is_valid_move((start_row, start_col), (row, col)):
-                self.game.make_move((start_row, start_col), (row, col))
+                if not self.game.make_move((start_row, start_col), (row, col)):
+                    promotion_position, color = self.game.promotion_callback
+                    self.open_promotion_dialog(promotion_position, color)
                 self.selected_piece = None
             else:
                 self.selected_piece = None
@@ -285,6 +319,9 @@ class ChessGameUI(tk.Tk):
         self.draw_board()
         if self.game.is_checkmate():
             self.after(3000, self.quit)  # Close the game after 3 seconds if checkmate
+
+    def open_promotion_dialog(self, position, color):
+        PromotionDialog(self, self.game, position, color)
 
     def is_white_piece(self, piece):
         return piece in '♙♖♘♗♕♔'
@@ -303,4 +340,3 @@ if __name__ == "__main__":
     game = ChessGame()
     ui = ChessGameUI(game)
     ui.play()
-
